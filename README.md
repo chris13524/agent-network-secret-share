@@ -24,7 +24,7 @@ cargo run --release -- [--public | --bind HOST] [--expires DURATION]
 
 ## Security properties
 
-- **Server authentication:** HTTPS (TLS 1.2/1.3) with a certificate generated per run. `--pinnedpubkey` makes curl abort unless the server presents exactly that public key, so the agent can't be redirected to a different endpoint. `--insecure` only disables CA-chain validation, which a self-signed certificate can't pass; the pin replaces it.
+- **Server authentication:** HTTPS (TLS 1.3 only) with a certificate generated per run. `--pinnedpubkey` makes curl abort unless the server presents exactly that public key, so the agent can't be redirected to a different endpoint. `--insecure` only disables CA-chain validation, which a self-signed certificate can't pass; the pin replaces it.
 - **Client authentication:** the one-time password is 256 bits from the OS CSPRNG and is compared in constant time.
 - **Single use:** the first successful `GET /secret` returns the secret, then the server exits.
 - **Limits:** after 5 failed authentication attempts, or when the expiry is reached, the server exits without sharing the secret.
