@@ -6,7 +6,7 @@
 //! attempts also shut the server down.
 
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{IpAddr, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::time::Duration;
 
 const MAX_FAILED_ATTEMPTS: u32 = 5;
@@ -33,7 +33,14 @@ fn run() -> io::Result<()> {
     let listener = TcpListener::bind((bind_host.as_str(), 0))?;
     let addr = listener.local_addr()?;
     let mut otp = Some(random_token()?);
-    let url = format!("http://{}/secret", addr);
+    // When listening on all interfaces, 0.0.0.0 isn't reachable from other
+    // machines, so advertise this machine's primary LAN address instead.
+    let advertised = if addr.ip().is_unspecified() {
+        SocketAddr::new(primary_local_ip().unwrap_or(addr.ip()), addr.port())
+    } else {
+        addr
+    };
+    let url = format!("http://{advertised}/secret");
 
     println!();
     println!("----- copy the prompt below to your AI agent -----");
@@ -87,12 +94,22 @@ fn run() -> io::Result<()> {
     Ok(())
 }
 
+/// Finds the IP of the interface used for outbound traffic. Connecting a UDP
+/// socket only selects a route; no packets are sent.
+fn primary_local_ip() -> Option<IpAddr> {
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("192.0.2.1:9").ok()?; // TEST-NET-1, never actually contacted
+    let ip = socket.local_addr().ok()?.ip();
+    (!ip.is_unspecified()).then_some(ip)
+}
+
 /// Returns the host to bind to. Defaults to loopback only.
 fn parse_args() -> String {
     let mut args = std::env::args().skip(1);
     let mut host = "127.0.0.1".to_string();
     while let Some(arg) = args.next() {
         match arg.as_str() {
+            "--public" => host = "0.0.0.0".to_string(),
             "--bind" | "-b" => match args.next() {
                 Some(h) => host = h,
                 None => usage_and_exit(),
@@ -106,9 +123,11 @@ fn parse_args() -> String {
 
 fn usage_and_exit() -> ! {
     eprintln!(
-        "usage: agent-network-secret-share [--bind HOST]\n\n\
+        "usage: agent-network-secret-share [--public | --bind HOST]\n\n\
          Prompts for a secret and serves it once on a random port, protected by a\n\
-         one-time password. HOST defaults to 127.0.0.1."
+         one-time password.\n\n\
+         \x20 --public     listen on all network interfaces (same as --bind 0.0.0.0)\n\
+         \x20 --bind HOST  listen on HOST (default: 127.0.0.1)"
     );
     std::process::exit(64);
 }

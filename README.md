@@ -15,4 +15,4 @@ cargo run --release
 - The one-time password is 256 bits from the OS CSPRNG and is compared in constant time.
 - The first successful `GET /secret` with `Authorization: Bearer <password>` returns the secret, and then the server exits. The password can't be used again.
 - After 5 failed authentication attempts the server exits without sharing the secret.
-- It listens on loopback only by default. Pass `--bind 0.0.0.0` (or another address) to expose it to other machines. Traffic is plain HTTP, so only do this on a network you trust.
+- It listens on loopback only by default. Pass `--public` to listen on all network interfaces (the printed URL then uses this machine's LAN IP), or `--bind HOST` for a specific address. Traffic is plain HTTP, so only do this on a network you trust.
