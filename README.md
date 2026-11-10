@@ -3,7 +3,7 @@
 Hand a secret (e.g. an access token) to an AI agent without pasting it into the chat.
 
 ```
-cargo run --release -- [--public | --bind HOST] [--expires DURATION]
+cargo run -- [--public | --bind HOST] [--expires DURATION]
 ```
 
 1. You're prompted for the secret (input is hidden).
