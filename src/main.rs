@@ -215,16 +215,51 @@ fn respond(stream: &mut TcpStream, status: &str, body: &str) {
     let _ = stream.flush();
 }
 
-/// 32 random bytes from the OS CSPRNG, hex encoded.
+/// 32 random bytes (256 bits) from the operating system's CSPRNG, hex encoded.
+/// Fails rather than falling back to a weaker source if the OS RNG errors.
 fn random_token() -> io::Result<String> {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).map_err(|e| io::Error::other(e.to_string()))?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
+/// Compares without leaking where the inputs differ through timing. Uses the
+/// audited `subtle` crate so the compiler can't turn it into an early exit.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
+    use subtle::ConstantTimeEq;
+    a.ct_eq(b).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn token_is_256_bits_of_lowercase_hex() {
+        let t = random_token().unwrap();
+        assert_eq!(t.len(), 64);
+        assert!(t.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
     }
-    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+
+    #[test]
+    fn tokens_are_unique_and_unbiased() {
+        let tokens: Vec<String> = (0..1000).map(|_| random_token().unwrap()).collect();
+        assert_eq!(tokens.iter().collect::<HashSet<_>>().len(), tokens.len());
+
+        // Each of the 16 hex digits should appear about 64000/16 = 4000 times.
+        let mut counts = [0u32; 16];
+        for b in tokens.iter().flat_map(|t| t.bytes()) {
+            counts[(b as char).to_digit(16).unwrap() as usize] += 1;
+        }
+        assert!(counts.iter().all(|&c| (3500..4500).contains(&c)), "{counts:?}");
+    }
+
+    #[test]
+    fn constant_time_eq_matches_only_identical_input() {
+        assert!(constant_time_eq(b"abc", b"abc"));
+        assert!(!constant_time_eq(b"abc", b"abd"));
+        assert!(!constant_time_eq(b"abc", b"ab"));
+        assert!(!constant_time_eq(b"", b"abc"));
+    }
 }
